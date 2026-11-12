@@ -171,6 +171,37 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border:0;border-radiu
 .next{font-size:12px;color:var(--muted);margin-top:2px;min-height:17px;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dock-btns{display:grid;grid-template-columns:52px 1fr;gap:8px;margin-top:10px}
 .dock-btns .btn{min-height:50px}
+
+/* ===== Viewport: Phase 2 füllt exakt die sichtbare Höhe, Timer unten fixiert ===== */
+:root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);--app-h:100dvh;--ring:clamp(84px,calc(var(--app-h) * .14),124px)}
+html{overscroll-behavior:none}
+body[data-phase="2"]{height:var(--app-h);overscroll-behavior:none}
+.setup{padding-top:calc(var(--sat) + 20px);padding-bottom:calc(var(--sab) + 116px)}
+.startbar{padding-bottom:calc(var(--sab) + 12px)}
+.brew{top:0;bottom:auto;height:100vh;height:var(--app-h);display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;gap:clamp(6px,1.1vh,10px);padding:calc(var(--sat) + 2px) 20px calc(var(--sab) + 8px)}
+.dock{grid-template-columns:var(--ring) minmax(0,1fr);gap:clamp(10px,2vh,14px)}
+.ring,.ring svg{width:var(--ring);height:var(--ring)}
+.clock{font-size:calc(var(--ring) * .235)}
+.total{font-size:clamp(10px,calc(var(--ring) * .095),11px)}
+@media (max-height:760px){
+  .brew-head{min-height:40px}
+  .brew-title span{display:none}
+  .kpi{padding:6px 6px}
+  .kpi .v{font-size:15px}
+  .kpi.coffee .v{font-size:16px}
+  .kpi .v.sm{font-size:12px}
+  .details{margin-bottom:6px}
+  .details div{padding:6px 8px}
+  .grindbox{padding-bottom:6px}
+  .step{padding:9px 0}
+  .goal{font-size:15px}
+  .dock{padding-top:8px}
+  .dock-btns{margin-top:6px}
+  .dock-btns .btn{min-height:44px}
+}
+@media (max-height:620px){
+  .grindbox p,.tip{display:none}
+}
 </style>
 </head>
 <body data-phase="1">
@@ -832,6 +863,16 @@ document.addEventListener('visibilitychange', () => {
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
 }
+
+/* ---------- Sichtbare Höhe messen (iPhone-Leisten, Drehen, alle Modelle) ---------- */
+function setAppHeight() {
+  const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  document.documentElement.style.setProperty('--app-h', Math.round(h) + 'px');
+}
+setAppHeight();
+window.addEventListener('resize', setAppHeight);
+window.addEventListener('orientationchange', () => setTimeout(setAppHeight, 250));
+if (window.visualViewport) window.visualViewport.addEventListener('resize', setAppHeight);
 
 render();
 })();
