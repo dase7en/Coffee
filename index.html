@@ -28,7 +28,7 @@ html,body{margin:0;background:var(--bg);color:var(--text)}
 body{font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;touch-action:manipulation;min-height:100vh;-webkit-user-select:none;user-select:none}
 body[data-phase="1"] #brew{display:none}
 body[data-phase="2"] #setup{display:none}
-body[data-phase="2"]{overflow:hidden;position:fixed;inset:0}
+body[data-phase="2"]{min-height:calc(100% + var(--sat) + 1px)}
 @keyframes inR{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
 @keyframes inL{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
 body[data-phase="2"] #brew{animation:inR .22s ease}
@@ -175,10 +175,11 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border:0;border-radiu
 /* ===== Viewport: Phase 2 an den echten Bildschirmkanten, Timer unten fixiert ===== */
 :root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);--top-fade:22px;--ring:clamp(84px,14dvh,124px)}
 html{overscroll-behavior:none}
+html{height:100%}
 body[data-phase="2"]{overscroll-behavior:none}
 .setup{padding-top:calc(var(--sat) + var(--top-fade) + 10px);padding-bottom:calc(var(--sab) + 116px)}
 .startbar{padding-bottom:calc(var(--sab) + 12px)}
-.brew{top:0;bottom:auto;height:var(--full-h,100vh);display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;gap:clamp(6px,1.1vh,10px);padding:calc(var(--sat) + var(--top-fade)) 20px max(calc(var(--sab) - 6px),12px)}
+.brew{top:0;bottom:0;height:auto;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;gap:clamp(6px,1.1vh,10px);padding:calc(var(--sat) + var(--top-fade)) 20px max(calc(var(--sab) - 6px),12px)}
 .dock{grid-template-columns:var(--ring) minmax(0,1fr);gap:clamp(10px,2vh,14px)}
 .ring,.ring svg{width:var(--ring);height:var(--ring)}
 .clock{font-size:calc(var(--ring) * .235)}
@@ -331,7 +332,7 @@ const fmtTime = s => { s = Math.max(0, Math.floor(s)); return Math.floor(s / 60)
 const r5 = n => Math.max(5, Math.round(n / 5) * 5);
 const ratioLabel = r => '1:' + (r % 1 ? fmtNum(r, 1) : r);
 const STORE_KEY = 'brewcalc.v2';
-const APP_VERSION = 'v5';
+const APP_VERSION = 'v6';
 
 const ICONS = {
   v60: '<path d="M4.5 6h15l-5.5 9h-4z"/><path d="M7 19h10"/><path d="M10 15v4M14 15v4"/>',
@@ -888,6 +889,13 @@ setFullHeight();
 window.addEventListener('resize', setFullHeight);
 window.addEventListener('orientationchange', () => setTimeout(setFullHeight, 300));
 
+document.addEventListener('touchmove', e => {
+  if (document.body.dataset.phase === '2' && !e.target.closest('#scroll')) e.preventDefault();
+}, { passive: false });
+window.addEventListener('scroll', () => {
+  if (document.body.dataset.phase === '2' && window.scrollY !== 0) window.scrollTo(0, 0);
+});
+
 /* ---------- Diagnose: 3x schnell auf die Überschrift tippen ---------- */
 (function diagnostics() {
   let taps = [], probe = document.createElement('div');
@@ -902,7 +910,7 @@ window.addEventListener('orientationchange', () => setTimeout(setFullHeight, 300
       'visualViewport: ' + (vv ? Math.round(vv.height) + ' (offset ' + Math.round(vv.offsetTop) + ')' : 'n/a'),
       'Safe Area oben/unten: ' + cs.paddingTop + ' / ' + cs.paddingBottom,
       'Phase-2-Bereich: ' + Math.round(brew.top) + ' bis ' + Math.round(brew.bottom),
-      'Gesetzte Höhe: ' + getComputedStyle(document.documentElement).getPropertyValue('--full-h'),
+      'Seitenhöhe: ' + document.documentElement.scrollHeight,
       'Home-Bildschirm-App: ' + (navigator.standalone || matchMedia('(display-mode: standalone)').matches ? 'ja' : 'nein'),
       'Version: ' + APP_VERSION
     ].join('\n'));
