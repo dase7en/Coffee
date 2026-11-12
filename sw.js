@@ -1,6 +1,6 @@
 // 7's coffeemaker: speichert die App für die Offline-Nutzung.
 // Bei jeder neuen Version die Nummer erhöhen, damit das iPhone die neue Fassung lädt.
-const CACHE = 'coffeemaker-v4';
+const CACHE = 'coffeemaker-v5';
 const FILES = ['./', './index.html', './manifest.webmanifest', './apple-touch-icon.png', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {

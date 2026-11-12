@@ -178,7 +178,7 @@ html{overscroll-behavior:none}
 body[data-phase="2"]{overscroll-behavior:none}
 .setup{padding-top:calc(var(--sat) + var(--top-fade) + 10px);padding-bottom:calc(var(--sab) + 116px)}
 .startbar{padding-bottom:calc(var(--sab) + 12px)}
-.brew{top:0;bottom:0;height:auto;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;gap:clamp(6px,1.1vh,10px);padding:calc(var(--sat) + var(--top-fade)) 20px max(calc(var(--sab) - 6px),12px)}
+.brew{top:0;bottom:auto;height:var(--full-h,100vh);display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;gap:clamp(6px,1.1vh,10px);padding:calc(var(--sat) + var(--top-fade)) 20px max(calc(var(--sab) - 6px),12px)}
 .dock{grid-template-columns:var(--ring) minmax(0,1fr);gap:clamp(10px,2vh,14px)}
 .ring,.ring svg{width:var(--ring);height:var(--ring)}
 .clock{font-size:calc(var(--ring) * .235)}
@@ -331,7 +331,7 @@ const fmtTime = s => { s = Math.max(0, Math.floor(s)); return Math.floor(s / 60)
 const r5 = n => Math.max(5, Math.round(n / 5) * 5);
 const ratioLabel = r => '1:' + (r % 1 ? fmtNum(r, 1) : r);
 const STORE_KEY = 'brewcalc.v2';
-const APP_VERSION = 'v4';
+const APP_VERSION = 'v5';
 
 const ICONS = {
   v60: '<path d="M4.5 6h15l-5.5 9h-4z"/><path d="M7 19h10"/><path d="M10 15v4M14 15v4"/>',
@@ -717,7 +717,7 @@ $('#roastSeg').addEventListener('click', e => {
 /* ---------- Phasenwechsel ---------- */
 function setPhase(n) {
   document.body.dataset.phase = String(n);
-  if (n === 2) { window.scrollTo(0, 0); $('#scroll').scrollTop = 0; tick(); }
+  if (n === 2) { window.scrollTo(0, 0); $('#scroll').scrollTop = 0; setFullHeight(); tick(); }
   else { $('#setup').classList.remove('back-anim'); void $('#setup').offsetWidth; $('#setup').classList.add('back-anim'); }
 }
 $('#goBtn').addEventListener('click', () => { unlockAudio(); setPhase(2); });
@@ -872,6 +872,22 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
 }
 
+/* ---------- Volle Höhe: iOS meldet in Home-Bildschirm-Apps ohne Scrollen
+   eine um die Statusleiste zu kleine Höhe (z. B. 793 statt 852 px) ---------- */
+function setFullHeight() {
+  let h = window.innerHeight;
+  const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+  if (standalone && screen.width && screen.height) {
+    const landscape = matchMedia('(orientation: landscape)').matches;
+    const sh = landscape ? Math.min(screen.width, screen.height) : Math.max(screen.width, screen.height);
+    h = Math.max(h, sh);
+  }
+  document.documentElement.style.setProperty('--full-h', Math.round(h) + 'px');
+}
+setFullHeight();
+window.addEventListener('resize', setFullHeight);
+window.addEventListener('orientationchange', () => setTimeout(setFullHeight, 300));
+
 /* ---------- Diagnose: 3x schnell auf die Überschrift tippen ---------- */
 (function diagnostics() {
   let taps = [], probe = document.createElement('div');
@@ -886,6 +902,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
       'visualViewport: ' + (vv ? Math.round(vv.height) + ' (offset ' + Math.round(vv.offsetTop) + ')' : 'n/a'),
       'Safe Area oben/unten: ' + cs.paddingTop + ' / ' + cs.paddingBottom,
       'Phase-2-Bereich: ' + Math.round(brew.top) + ' bis ' + Math.round(brew.bottom),
+      'Gesetzte Höhe: ' + getComputedStyle(document.documentElement).getPropertyValue('--full-h'),
       'Home-Bildschirm-App: ' + (navigator.standalone || matchMedia('(display-mode: standalone)').matches ? 'ja' : 'nein'),
       'Version: ' + APP_VERSION
     ].join('\n'));
