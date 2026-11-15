@@ -33,6 +33,9 @@ body[data-phase="2"]{min-height:calc(100% + var(--sat) + 1px)}
 @keyframes inL{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
 body[data-phase="2"] #brew{animation:inR .22s ease}
 body[data-phase="1"] #setup.back-anim{animation:inL .22s ease}
+body.swiping #brew{background:var(--bg);box-shadow:-1px 0 0 var(--line2);animation:none}
+body.swiping #setup{display:block;position:fixed;inset:0;overflow:hidden;pointer-events:none}
+body.swiping #setup .startbar{display:none}
 
 .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:500}
 .muted{color:var(--muted);font-size:14px}
@@ -117,7 +120,8 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border:0;border-radiu
 .brew{position:fixed;inset:0;max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:10px;padding:calc(env(safe-area-inset-top) + 6px) 20px calc(env(safe-area-inset-bottom) + 10px)}
 .brew-head{display:flex;align-items:center;gap:10px;min-height:44px}
 .back{appearance:none;-webkit-appearance:none;border:0;background:transparent;color:var(--text);font:inherit;font-size:16px;display:flex;align-items:center;gap:2px;padding:8px 4px 8px 0;min-height:44px;cursor:pointer}
-.back svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.back{width:44px;justify-content:flex-start}
+.back svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .brew-title{flex:1;min-width:0;text-align:center}
 .brew-title b{display:block;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brew-title span{display:block;font-size:11px;color:var(--muted);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -210,15 +214,14 @@ body[data-phase="2"]{overscroll-behavior:none}
 <!-- ============ PHASE 1: Einstellungen ============ -->
 <main id="setup" class="setup">
   <header>
-    <div class="eyebrow">Kaffeerechner</div>
     <h1>7's coffeemaker</h1>
     <p class="phase-hint">Einstellungen wählen, dann Rezept starten.</p>
   </header>
 
   <div class="section-title">Ich trinke</div>
   <div class="seg" id="drinkSeg">
-    <button data-drink="pur">Pur<small>schwarz</small></button>
     <button data-drink="milk">Mit Milch<small>Milch, Milchschaum</small></button>
+    <button data-drink="pur">Pur<small>schwarz</small></button>
   </div>
 
   <div class="section-title" id="recipeTitle">Rezept</div>
@@ -292,7 +295,7 @@ body[data-phase="2"]{overscroll-behavior:none}
 <!-- ============ PHASE 2: Anleitung & Timer ============ -->
 <section id="brew" class="brew" aria-label="Anleitung und Timer">
   <div class="brew-head">
-    <button class="back" id="backBtn"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Einstellungen</button>
+    <button class="back" id="backBtn" aria-label="Zurück zu den Einstellungen"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
     <div class="brew-title"><b id="bTitle"></b><span id="bSub"></span></div>
     <button class="sound" id="soundBtn" aria-label="Signalton" aria-pressed="true"><svg viewBox="0 0 24 24" id="soundIcon"></svg></button>
   </div>
@@ -338,7 +341,7 @@ const fmtTime = s => { s = Math.max(0, Math.floor(s)); return Math.floor(s / 60)
 const r5 = n => Math.max(5, Math.round(n / 5) * 5);
 const ratioLabel = r => '1:' + (r % 1 ? fmtNum(r, 1) : r);
 const STORE_KEY = 'brewcalc.v2';
-const APP_VERSION = 'v7';
+const APP_VERSION = 'v8';
 
 const ICONS = {
   v60: '<path d="M4.5 6h15l-5.5 9h-4z"/><path d="M7 19h10"/><path d="M10 15v4M14 15v4"/>',
@@ -685,7 +688,7 @@ const METHODS = {
 /* ---------- State & Speicher ---------- */
 function defaults() {
   return {
-    source: 'standard', pureSource: 'standard',
+    source: 'milch', pureSource: 'standard',
     methodBy: { standard: 'v60', peng: 'solo', gautherin: 'gautherin', milch: 'kasuya' },
     unit: 'ml', strength: 'standard', roast: 'medium', sound: true,
     amount: { v60: 300, aeropress: 220, french: 500, espresso: 36, solo: 210, gautherin: 210,
@@ -881,8 +884,11 @@ $('#roastSeg').addEventListener('click', e => {
 });
 
 /* ---------- Phasenwechsel ---------- */
+let setupScroll = 0;
 function setPhase(n) {
+  if (n === 2) setupScroll = window.scrollY;
   document.body.dataset.phase = String(n);
+  if (n === 1) window.scrollTo(0, setupScroll);
   if (n === 2) { window.scrollTo(0, 0); $('#scroll').scrollTop = 0; setFullHeight(); tick(); }
   else { $('#setup').classList.remove('back-anim'); void $('#setup').offsetWidth; $('#setup').classList.add('back-anim'); }
 }
@@ -1060,6 +1066,57 @@ document.addEventListener('touchmove', e => {
 window.addEventListener('scroll', () => {
   if (document.body.dataset.phase === '2' && window.scrollY !== 0) window.scrollTo(0, 0);
 });
+
+/* ---------- Zurück-Wischen in Phase 2 ---------- */
+(function swipeBack() {
+  const brew = $('#brew'), setup = $('#setup');
+  let x0 = 0, y0 = 0, t0 = 0, dx = 0, mode = null;
+  const W = () => brew.getBoundingClientRect().width || window.innerWidth;
+  const paint = d => {
+    const w = W(), f = Math.min(1, d / w);
+    brew.style.transform = `translateX(${d}px)`;
+    setup.style.transform = `translateX(${-30 * (1 - f)}%)`;
+    setup.style.opacity = String(0.4 + 0.6 * f);
+  };
+  const clear = () => {
+    document.body.classList.remove('swiping');
+    brew.style.transition = setup.style.transition = '';
+    brew.style.transform = setup.style.transform = setup.style.opacity = '';
+  };
+  brew.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1 || document.body.dataset.phase !== '2') { mode = 'no'; return; }
+    const t = e.touches[0];
+    x0 = t.clientX; y0 = t.clientY; t0 = Date.now(); dx = 0; mode = null;
+  }, { passive: true });
+  brew.addEventListener('touchmove', e => {
+    if (mode === 'no') return;
+    const t = e.touches[0], mx = t.clientX - x0, my = t.clientY - y0;
+    if (!mode) {
+      if (Math.abs(mx) < 10 && Math.abs(my) < 10) return;
+      mode = mx > 0 && Math.abs(mx) > Math.abs(my) * 1.3 ? 'swipe' : 'no';
+      if (mode === 'no') return;
+      document.body.classList.add('swiping');
+      setup.scrollTop = setupScroll;
+    }
+    e.preventDefault();
+    dx = Math.max(0, mx);
+    paint(dx);
+  }, { passive: false });
+  const end = () => {
+    if (mode !== 'swipe') { mode = null; return; }
+    mode = null;
+    const w = W(), v = dx / Math.max(1, Date.now() - t0);
+    const go = dx > w * 0.35 || (v > 0.5 && dx > 40);
+    brew.style.transition = setup.style.transition = 'transform .22s ease-out, opacity .22s ease-out';
+    paint(go ? w : 0);
+    setTimeout(() => {
+      if (go) { document.body.dataset.phase = '1'; clear(); window.scrollTo(0, setupScroll); }
+      else clear();
+    }, 230);
+  };
+  brew.addEventListener('touchend', end);
+  brew.addEventListener('touchcancel', end);
+})();
 
 /* ---------- Diagnose: 3x schnell auf die Überschrift tippen ---------- */
 (function diagnostics() {
