@@ -215,8 +215,14 @@ body[data-phase="2"]{overscroll-behavior:none}
     <p class="phase-hint">Einstellungen wählen, dann Rezept starten.</p>
   </header>
 
-  <div class="section-title">Rezept</div>
-  <label class="picker">
+  <div class="section-title">Ich trinke</div>
+  <div class="seg" id="drinkSeg">
+    <button data-drink="pur">Pur<small>schwarz</small></button>
+    <button data-drink="milk">Mit Milch<small>Milch, Milchschaum</small></button>
+  </div>
+
+  <div class="section-title" id="recipeTitle">Rezept</div>
+  <label class="picker" id="sourcePicker">
     <svg viewBox="0 0 24 24" id="srcIcon" aria-hidden="true"></svg>
     <div class="picker-text"><b id="srcName"></b><span id="srcSub"></span></div>
     <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
@@ -224,7 +230,7 @@ body[data-phase="2"]{overscroll-behavior:none}
   </label>
   <div class="card info" id="sourceInfo" hidden></div>
 
-  <div class="section-title">Zubereitung</div>
+  <div class="section-title" id="methodTitle">Zubereitung</div>
   <div class="choices" id="methods"></div>
 
   <div class="section-title" id="amountTitle">Menge</div>
@@ -332,7 +338,7 @@ const fmtTime = s => { s = Math.max(0, Math.floor(s)); return Math.floor(s / 60)
 const r5 = n => Math.max(5, Math.round(n / 5) * 5);
 const ratioLabel = r => '1:' + (r % 1 ? fmtNum(r, 1) : r);
 const STORE_KEY = 'brewcalc.v2';
-const APP_VERSION = 'v6';
+const APP_VERSION = 'v7';
 
 const ICONS = {
   v60: '<path d="M4.5 6h15l-5.5 9h-4z"/><path d="M7 19h10"/><path d="M10 15v4M14 15v4"/>',
@@ -341,6 +347,7 @@ const ICONS = {
   espresso: '<path d="M4.5 10h11v4a4.5 4.5 0 0 1-4.5 4.5H9A4.5 4.5 0 0 1 4.5 14z"/><path d="M15.5 11h1.5a2 2 0 0 1 0 4h-1.5"/><path d="M3.5 21h14"/><path d="M8.5 3c-1 1.5 1 2.5 0 4.5M12 3c-1 1.5 1 2.5 0 4.5"/>',
   book: '<path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/><path d="M9 7.5h6M9 11h4"/>',
   trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5.5a2.5 2.5 0 0 0 2.6 4M16 6h2.5a2.5 2.5 0 0 1-2.6 4"/><path d="M12 13v4M9.5 17h5M8.5 21h7"/>',
+  milk: '<path d="M5 10h12v5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z"/><path d="M17 12h1.5a2 2 0 0 1 0 4H17"/><path d="M5 10c0-2.5 2-3 3-3s1.5-1.5 3-1.5S13 7 14 7s3 .5 3 3"/>',
   medal: '<circle cx="12" cy="15" r="5.5"/><path d="M8.7 10.6L6 3h4l2 4.5L14 3h4l-2.7 7.6"/><path d="M12 12.8v4.4"/>',
   soundOn: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
   soundOff: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>'
@@ -370,8 +377,27 @@ const SOURCES = {
         <li>Geschätzt (mit ≈ markiert): Temperatur und Zeitpunkte der Aufgüsse. Die genauen Werte veröffentlicht Simon nur in der beean App und auf Instagram.</li>
         <li>Den Mahlgrad musst du für deine Mühle wahrscheinlich in ein paar Versuchen einstellen.</li>
       </ul>`
+  },
+  milch: {
+    name: 'Mit Milch', sub: 'Für Milch und Milchschaum', icon: 'milk', milk: true,
+    methods: ['kasuya', 'osmotic', 'konzentrat', 'darkroast', 'stufen']
   }
 };
+
+/* ---------- Milch-Rezepte (feste Verhältnisse, Mengen skalieren mit der Wassermenge) ---------- */
+const milkInfo = (title, items) => `<b>${title}</b><ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>`;
+const milkMethod = o => {
+  const g = o.grind;
+  return Object.assign({
+    icon: 'v60', fixed: true, amountLabel: 'Wassermenge', unit: 'ml',
+    min: 150, max: 450, step: 10, cup: 150, cupName: ['Tasse', 'Tassen']
+  }, o, {
+    ratios: { mild: o.ratio, standard: o.ratio, strong: o.ratio },
+    temp: { light: o.tempNum, medium: o.tempNum, dark: o.tempNum },
+    grind: { light: g, medium: g, dark: g }
+  });
+};
+const at = (water, base, g) => Math.round(water * g / base);
 
 /* ---------- Zubereitungen ---------- */
 const METHODS = {
@@ -534,16 +560,138 @@ const METHODS = {
         ]
       };
     }
-  }
+  },
+
+  /* ----- Mit Milch ----- */
+  kasuya: milkMethod({
+    name: 'Kasuya 4:6', sub: 'Kräftig, vollmundig', fixedNote: '1:15 · 89 °C',
+    ratio: 15, tempNum: 89,
+    grind: { label: 'Grob', hint: 'Etwa wie grobes Meersalz. Läuft es zu schnell durch und schmeckt dünn, eine Stufe feiner.', pos: 80 },
+    info: milkInfo('Tetsu Kasuya 4:6, kräftige Variante.', [
+      'Vollmundig, süß, wenig Bitterkeit. Sehr gut für Milchschaum.',
+      'Fünf gleich große Aufgüsse: die ersten zwei bestimmen die Süße, die letzten drei die Stärke.',
+      'Basis: 20 g Kaffee auf 300 ml, Verhältnis 1:15, 89 °C.'
+    ]),
+    plan({ water, cf }) {
+      const p = i => at(water, 5, i);
+      return {
+        bloom: p(1), bt: 45, end: 225,
+        prep: `Papierfilter einsetzen, mit heißem Wasser spülen und das Spülwasser wegschütten. <strong>${cf} g</strong> Kaffee <strong>grob</strong> mahlen, einfüllen, Bett glatt schütteln und die Waage auf 0 stellen. Wasser auf <strong>89 °C</strong>.`,
+        steps: [
+          { t: 0, title: 'Blooming', goal: `Gießen bis ${p(1)} g`, text: `<strong>${p(1)} ml</strong> gleichmäßig aufgießen, bis alles benetzt ist. Dieser Aufguss legt die Basis-Süße an.` },
+          { t: 45, title: 'Zweiter Aufguss', goal: `Gießen bis ${p(2)} g`, text: `Weitere <strong>${p(2) - p(1)} ml</strong> bis <strong>${p(2)} g</strong> gießen. Damit ist die Geschmacksphase abgeschlossen.` },
+          { t: 90, title: 'Dritter Aufguss', goal: `Gießen bis ${p(3)} g`, text: `<strong>${p(3) - p(2)} ml</strong> bis <strong>${p(3)} g</strong> gießen. Start der Stärkephase.` },
+          { t: 135, title: 'Vierter Aufguss', goal: `Gießen bis ${p(4)} g`, text: `<strong>${p(4) - p(3)} ml</strong> bis <strong>${p(4)} g</strong> gießen, für mehr Körper.` },
+          { t: 180, title: 'Fünfter Aufguss', goal: `Gießen bis ${water} g`, text: `Die letzten <strong>${water - p(4)} ml</strong> bis <strong>${water} g</strong> gießen und durchlaufen lassen.` },
+          { t: 225, title: 'Fertig', goal: 'Filter abnehmen', text: 'Filter abnehmen, auch wenn noch etwas Wasser im Bett steht. Kanne schwenken, Milch dazu.' }
+        ]
+      };
+    }
+  }),
+  osmotic: milkMethod({
+    name: 'Osmotic Flow', sub: 'Japanischer Stil', fixedNote: '1:14,5 · 89 °C',
+    ratio: 14.5, tempNum: 89,
+    grind: { label: 'Mittelgrob', hint: 'Etwa wie grober Sand. Etwas gröber als ein normaler V60.', pos: 68 },
+    info: milkInfo('Osmotic Flow, japanischer Stil.', [
+      'Sirupartig, schwerer Körper, schokoladig. Ideal für Milchschaum.',
+      'Immer extrem langsam und nur in die Mitte gießen, die Ränder bleiben unberührt.',
+      'Basis: 20 g Kaffee auf 290 ml, Verhältnis 1:14,5, 89 °C.'
+    ]),
+    plan({ water, cf }) {
+      const a = at(water, 290, 40), b = at(water, 290, 165);
+      return {
+        bloom: a, bt: 30, end: 180,
+        prep: `Papierfilter einsetzen, mit heißem Wasser spülen und das Spülwasser wegschütten. <strong>${cf} g</strong> Kaffee <strong>mittelgrob</strong> mahlen, einfüllen, Bett glatt schütteln und die Waage auf 0 stellen. Wasser auf <strong>89 °C</strong>.`,
+        steps: [
+          { t: 0, title: 'Blooming', goal: `Gießen bis ${a} g, Mitte`, text: `<strong>${a} ml</strong> langsam und exakt in die Mitte gießen.` },
+          { t: 30, title: 'Kuppel aufbauen', goal: `Gießen bis ${b} g, nur Mitte`, text: `<strong>${b - a} ml</strong> extrem langsam nur in die Mitte gießen, bis <strong>${b} g</strong>. Es bildet sich eine Kaffeekuppel. Ränder unberührt lassen.` },
+          { t: 90, title: 'Auffüllen', goal: `Gießen bis ${water} g, kleiner Kreis`, text: `<strong>${water - b} ml</strong> weiterhin langsam in einem münzgroßen Kreis in der Mitte bis <strong>${water} g</strong> auffüllen.` },
+          { t: 180, title: 'Fertig', goal: 'Durchlaufen lassen, genießen', text: 'Durchlaufen lassen, Kanne schwenken, Milch dazu.' }
+        ]
+      };
+    }
+  }),
+  konzentrat: milkMethod({
+    name: 'V60-Konzentrat', sub: 'Cappuccino-Style', fixedNote: '1:11,4 · 91 °C',
+    ratio: 250 / 22, tempNum: 91,
+    grind: { label: 'Mittelfein', hint: 'Etwa wie Tafelsalz.', pos: 42 },
+    info: milkInfo('V60-Konzentrat, Cappuccino-Style.', [
+      'Sehr intensiv und dicht, für Tassen mit viel Milchschaum.',
+      'Zügig in Spiralen gießen. Den Milchschaum erst aufgeben, wenn der Kaffee durchgelaufen ist.',
+      'Basis: 22 g Kaffee auf 250 ml, Verhältnis 1:11,4, 91 °C.'
+    ]),
+    plan({ water, cf }) {
+      const a = at(water, 250, 50), b = at(water, 250, 150);
+      return {
+        bloom: a, bt: 40, end: 150,
+        prep: `Papierfilter einsetzen, mit heißem Wasser spülen und das Spülwasser wegschütten. <strong>${cf} g</strong> Kaffee <strong>mittelfein</strong> mahlen, einfüllen, Bett glatt schütteln und die Waage auf 0 stellen. Wasser auf <strong>91 °C</strong>.`,
+        steps: [
+          { t: 0, title: 'Blooming', goal: `Gießen bis ${a} g`, text: `<strong>${a} ml</strong> aufgießen und 40 s quellen lassen.` },
+          { t: 40, title: 'Erster Aufguss', goal: `Gießen bis ${b} g, zügig`, text: `<strong>${b - a} ml</strong> zügig in Spiralen bis <strong>${b} g</strong> gießen.` },
+          { t: 75, title: 'Zweiter Aufguss', goal: `Gießen bis ${water} g`, text: `Die letzten <strong>${water - b} ml</strong> bis <strong>${water} g</strong> auffüllen und durchlaufen lassen.` },
+          { t: 150, title: 'Fertig', goal: 'Milchschaum aufgeben', text: 'Konzentrat in die Tassen verteilen und warmen Milchschaum darauf geben.' }
+        ]
+      };
+    }
+  }),
+  darkroast: milkMethod({
+    name: 'Dark Roast', sub: 'Hario Standard', fixedNote: '1:15 · 88 °C',
+    ratio: 15, tempNum: 88,
+    grind: { label: 'Mittelgrob', hint: 'Etwa wie grober Sand. Dunkle Röstungen extrahieren schnell.', pos: 66 },
+    info: milkInfo('Hario Dark-Roast-Standard.', [
+      'Karamellig, rund, milde Röstnoten ohne Bitterstoffe.',
+      'Ein einziger zügiger Hauptaufguss hält die Kontaktzeit kurz.',
+      'Basis: 16 g Kaffee auf 240 ml, Verhältnis 1:15, 88 °C.'
+    ]),
+    plan({ water, cf }) {
+      const a = at(water, 240, 40);
+      return {
+        bloom: a, bt: 30, end: 150,
+        prep: `Papierfilter einsetzen, mit heißem Wasser spülen und das Spülwasser wegschütten. <strong>${cf} g</strong> Kaffee <strong>mittelgrob</strong> mahlen, einfüllen, Bett glatt schütteln und die Waage auf 0 stellen. Wasser auf <strong>88 °C</strong>.`,
+        steps: [
+          { t: 0, title: 'Blooming', goal: `Gießen bis ${a} g`, text: `<strong>${a} ml</strong> aufgießen und 30 s warten.` },
+          { t: 30, title: 'Hauptaufguss', goal: `Gießen bis ${water} g, zügig`, text: `<strong>${water - a} ml</strong> zügig in gleichmäßigen Spiralen von innen nach außen bis <strong>${water} g</strong> gießen, damit die Kontaktzeit kurz bleibt.` },
+          { t: 150, title: 'Fertig', goal: 'Durchlaufen lassen, genießen', text: 'Durchlaufen lassen, Kanne schwenken, Milch dazu.' }
+        ]
+      };
+    }
+  }),
+  stufen: milkMethod({
+    name: 'Stufen-Temperatur', sub: '85 °C, dann 80 °C', fixedNote: '1:14 · 85/80 °C',
+    ratio: 14, tempNum: 85, tempText: '85/80 °C',
+    grind: { label: 'Mittel', hint: 'Etwa wie feiner Sand.', pos: 52 },
+    info: milkInfo('Stufen-Temperatur-Methode.', [
+      'Extrem weich und süß, ohne bittere Tannine. Gut für Milchschaum.',
+      'Die ersten zwei Aufgüsse mit 85 °C, danach Wasserkocher auf 80 °C umstellen.',
+      'Basis: 20 g Kaffee auf 280 ml, Verhältnis 1:14.'
+    ]),
+    plan({ water, cf }) {
+      const a = at(water, 280, 60), b = at(water, 280, 125), c = at(water, 280, 190);
+      return {
+        bloom: a, bt: 35, end: 165,
+        prep: `Papierfilter einsetzen, mit heißem Wasser spülen und das Spülwasser wegschütten. <strong>${cf} g</strong> Kaffee <strong>mittel</strong> mahlen, einfüllen, Bett glatt schütteln und die Waage auf 0 stellen. Wasserkocher auf <strong>85 °C</strong>.`,
+        steps: [
+          { t: 0, title: 'Blooming', goal: `Gießen bis ${a} g, 85 °C`, text: `<strong>${a} ml</strong> mit <strong>85 °C</strong> aufgießen.` },
+          { t: 35, title: 'Zweiter Aufguss', goal: `Gießen bis ${b} g, 85 °C`, text: `<strong>${b - a} ml</strong> mit <strong>85 °C</strong> bis <strong>${b} g</strong> gießen. Danach den Wasserkocher auf <strong>80 °C</strong> umstellen.` },
+          { t: 75, title: 'Dritter Aufguss', goal: `Gießen bis ${c} g, 80 °C`, text: `<strong>${c - b} ml</strong> mit <strong>80 °C</strong> bis <strong>${c} g</strong> gießen.` },
+          { t: 115, title: 'Vierter Aufguss', goal: `Gießen bis ${water} g, 80 °C`, text: `Die letzten <strong>${water - c} ml</strong> mit <strong>80 °C</strong> bis <strong>${water} g</strong> gießen.` },
+          { t: 165, title: 'Fertig', goal: 'Durchlaufen lassen, genießen', text: 'Durchlaufen lassen, Kanne schwenken, Milch dazu.' }
+        ]
+      };
+    }
+  })
 };
 
 /* ---------- State & Speicher ---------- */
 function defaults() {
   return {
-    source: 'standard', methodBy: { standard: 'v60', peng: 'solo', gautherin: 'gautherin' },
+    source: 'standard', pureSource: 'standard',
+    methodBy: { standard: 'v60', peng: 'solo', gautherin: 'gautherin', milch: 'kasuya' },
     unit: 'ml', strength: 'standard', roast: 'medium', sound: true,
-    amount: { v60: 300, aeropress: 220, french: 500, espresso: 36, solo: 210, gautherin: 210 },
-    cups: { v60: 1, aeropress: 1, french: 2, espresso: 1, solo: 1, gautherin: 1 }
+    amount: { v60: 300, aeropress: 220, french: 500, espresso: 36, solo: 210, gautherin: 210,
+              kasuya: 300, osmotic: 290, konzentrat: 250, darkroast: 240, stufen: 280 },
+    cups: { v60: 1, aeropress: 1, french: 2, espresso: 1, solo: 1, gautherin: 1,
+            kasuya: 2, osmotic: 2, konzentrat: 2, darkroast: 2, stufen: 2 }
   };
 }
 function load() {
@@ -553,6 +701,7 @@ function load() {
   if (!s || typeof s !== 'object') return d;
   const st = {
     source: SOURCES[s.source] ? s.source : d.source,
+    pureSource: SOURCES[s.pureSource] && !SOURCES[s.pureSource].milk ? s.pureSource : d.pureSource,
     methodBy: Object.assign({}, d.methodBy, s.methodBy),
     unit: s.unit === 'cups' ? 'cups' : 'ml',
     strength: ['mild', 'standard', 'strong'].includes(s.strength) ? s.strength : d.strength,
@@ -575,6 +724,7 @@ function load() {
 function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {} }
 let state = load();
 const methodKey = () => state.methodBy[state.source];
+const isMilk = () => !!SOURCES[state.source].milk;
 
 /* ---------- Berechnung ---------- */
 function calc() {
@@ -592,7 +742,7 @@ let current = calc();
 const choiceHTML = (attr, key, o) =>
   `<button class="choice" data-${attr}="${key}" aria-pressed="false"><svg viewBox="0 0 24 24">${ICONS[o.icon]}</svg><div><b>${o.name}</b><span>${o.sub}</span></div></button>`;
 
-$('#sourceSelect').innerHTML = Object.entries(SOURCES).map(([k, s]) => `<option value="${k}">${s.name} (${s.sub})</option>`).join('');
+$('#sourceSelect').innerHTML = Object.entries(SOURCES).filter(([, s]) => !s.milk).map(([k, s]) => `<option value="${k}">${s.name} (${s.sub})</option>`).join('');
 
 function setPressed(sel, attr, val) {
   $$(sel).forEach(b => b.setAttribute('aria-pressed', String(b.dataset[attr] === val)));
@@ -608,13 +758,20 @@ function render() {
   const isEsp = key === 'espresso';
 
   /* Phase 1 */
-  $('#sourceSelect').value = state.source;
+  const milk = !!src.milk;
+  setPressed('#drinkSeg [data-drink]', 'drink', milk ? 'milk' : 'pur');
+  $('#recipeTitle').hidden = milk;
+  $('#sourcePicker').hidden = milk;
+  $('#methodTitle').textContent = milk ? 'Rezept' : 'Zubereitung';
+  if (!milk) $('#sourceSelect').value = state.source;
   $('#srcIcon').innerHTML = ICONS[src.icon];
   $('#srcName').textContent = src.name;
   $('#srcSub').textContent = src.sub;
   const info = $('#sourceInfo');
-  info.hidden = !src.info;
-  if (src.info) info.innerHTML = src.info;
+  const infoHTML = m.info || src.info;
+  (milk ? $('#methods') : $('#sourcePicker')).after(info);
+  info.hidden = !infoHTML;
+  if (infoHTML) info.innerHTML = infoHTML;
 
   const methodsEl = $('#methods');
   methodsEl.classList.toggle('single', src.methods.length === 1);
@@ -651,8 +808,10 @@ function render() {
   $('#sumLine').textContent = `${water} ${m.unit} · ${temp} · ${grind.label.split(',')[0]}`;
 
   /* Phase 2 */
-  $('#bTitle').textContent = state.source === 'standard' ? m.name : `${src.name}`;
-  $('#bSub').textContent = m.fixed
+  $('#bTitle').textContent = state.source === 'standard' || milk ? m.name : `${src.name}`;
+  $('#bSub').textContent = milk
+    ? m.fixedNote
+    : m.fixed
     ? `${m.name} · ${m.fixedNote}`
     : `${STRENGTH_NAME[state.strength]} ${ratioLabel(ratio)} · Röstung ${ROAST_NAME[state.roast]}`;
   $('#kCoffee').textContent = `${fmtNum(coffee)} g`;
@@ -686,7 +845,13 @@ function change(fn) { fn(); resetTimer(); save(); render(); }
 
 $('#sourceSelect').addEventListener('change', e => {
   if (!SOURCES[e.target.value] || e.target.value === state.source) return;
-  change(() => { state.source = e.target.value; });
+  change(() => { state.source = e.target.value; state.pureSource = e.target.value; });
+});
+$('#drinkSeg').addEventListener('click', e => {
+  const b = e.target.closest('[data-drink]'); if (!b) return;
+  const want = b.dataset.drink === 'milk';
+  if (want === isMilk()) return;
+  change(() => { state.source = want ? 'milch' : state.pureSource; });
 });
 $('#methods').addEventListener('click', e => {
   const b = e.target.closest('[data-method]'); if (!b || b.dataset.method === methodKey()) return;
